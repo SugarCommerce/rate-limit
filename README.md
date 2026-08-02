@@ -18,13 +18,13 @@ PHP 8.5+. `ext-apcu` recommended.
 ## Installation
 
 ```bash
-composer require sugarmill/rate-limit
+composer require sugarcommerce/rate-limit
 ```
 
 ## Usage
 
 ```php
-use SugarMill\RateLimit\{RateLimiter, Stores\Apcu};
+use Sugar\RateLimit\{RateLimiter, Stores\Apcu};
 
 $limiter  = new RateLimiter( new Apcu() );
 $decision = $limiter->for( 'login', $ip )->check( 5, 60 );
