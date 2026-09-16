@@ -2,7 +2,7 @@
 /**
  * APCu counter storage.
  *
- * @package   Sugar\RateLimit
+ * @package   SugarCommerce\RateLimit
  * @copyright Copyright (c) 2026, ArrayPress Limited
  * @license   GPL-2.0-or-later
  * @since     1.0.0
@@ -10,9 +10,9 @@
 
 declare( strict_types=1 );
 
-namespace Sugar\RateLimit\Stores;
+namespace SugarCommerce\RateLimit\Stores;
 
-use Sugar\RateLimit\Store;
+use SugarCommerce\RateLimit\Store;
 
 /**
  * Class Apcu

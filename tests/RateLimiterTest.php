@@ -2,7 +2,7 @@
 /**
  * RateLimiter test suite.
  *
- * @package   Sugar\RateLimit
+ * @package   SugarCommerce\RateLimit
  * @copyright Copyright (c) 2026, ArrayPress Limited
  * @license   GPL-2.0-or-later
  * @since     1.0.0
@@ -10,15 +10,15 @@
 
 declare( strict_types=1 );
 
-namespace Sugar\RateLimit\Tests;
+namespace SugarCommerce\RateLimit\Tests;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Sugar\RateLimit\Decision;
-use Sugar\RateLimit\RateLimiter;
-use Sugar\RateLimit\Store;
-use Sugar\RateLimit\Stores\File;
-use Sugar\RateLimit\Stores\Memory;
+use SugarCommerce\RateLimit\Decision;
+use SugarCommerce\RateLimit\RateLimiter;
+use SugarCommerce\RateLimit\Store;
+use SugarCommerce\RateLimit\Stores\File;
+use SugarCommerce\RateLimit\Stores\Memory;
 
 final class RateLimiterTest extends TestCase {
 

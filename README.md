@@ -24,7 +24,7 @@ composer require sugarcommerce/rate-limit
 ## Usage
 
 ```php
-use Sugar\RateLimit\{RateLimiter, Stores\Apcu};
+use SugarCommerce\RateLimit\{RateLimiter, Stores\Apcu};
 
 $limiter  = new RateLimiter( new Apcu() );
 $decision = $limiter->for( 'login', $ip )->check( 5, 60 );
