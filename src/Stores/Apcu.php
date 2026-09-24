@@ -60,6 +60,7 @@ final class Apcu implements Store {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function increment( string $key, int $ttl, int $by = 1 ): int {
 		$key = $this->prefix . $key;
 
@@ -73,6 +74,7 @@ final class Apcu implements Store {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function get( string $key ): int {
 		$value = apcu_fetch( $this->prefix . $key, $found );
 
@@ -82,6 +84,7 @@ final class Apcu implements Store {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function forget( string $key ): void {
 		apcu_delete( $this->prefix . $key );
 	}

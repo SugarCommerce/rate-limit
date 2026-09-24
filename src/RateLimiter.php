@@ -116,6 +116,7 @@ final readonly class RateLimiter {
 	 *
 	 * @throws \InvalidArgumentException On a non-positive limit or window.
 	 */
+	#[\NoDiscard( 'A denied decision must be enforced; counting alone limits nothing.' )]
 	public function check( string $key, int $limit, int $window ): Decision {
 		if ( $limit < 1 || $window < 1 ) {
 			throw new \InvalidArgumentException( 'Rate limit and window must both be at least 1.' );
@@ -153,6 +154,7 @@ final readonly class RateLimiter {
 	 *
 	 * @return Decision
 	 */
+	#[\NoDiscard( 'Peeking only answers a question.' )]
 	public function peek( string $key, int $limit, int $window ): Decision {
 		$now      = $this->now();
 		$elapsed  = $now % $window;

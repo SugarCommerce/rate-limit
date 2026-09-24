@@ -50,6 +50,7 @@ final class File implements Store {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function increment( string $key, int $ttl, int $by = 1 ): int {
 		$path   = $this->path( $key );
 		$handle = @fopen( $path, 'c+' );
@@ -92,6 +93,7 @@ final class File implements Store {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function get( string $key ): int {
 		$contents = @file_get_contents( $this->path( $key ) );
 
@@ -107,6 +109,7 @@ final class File implements Store {
 	/**
 	 * {@inheritDoc}
 	 */
+	#[\Override]
 	public function forget( string $key ): void {
 		@unlink( $this->path( $key ) );
 	}

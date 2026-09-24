@@ -1,6 +1,6 @@
 {
   "name": "sugarcommerce/rate-limit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sliding-window rate limiting with atomic counters. APCu, file and in-memory stores, standard rate-limit headers, and an API that makes forgetting the identity key impossible. Zero dependencies.",
   "type": "library",
   "license": "GPL-2.0-or-later",

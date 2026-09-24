@@ -47,6 +47,7 @@ final readonly class Limit {
 	 *
 	 * @return Decision
 	 */
+	#[\NoDiscard( 'A denied decision must be enforced; counting alone limits nothing.' )]
 	public function check( int $limit, int $window ): Decision {
 		return $this->limiter->check( $this->key(), $limit, $window );
 	}
@@ -61,6 +62,7 @@ final readonly class Limit {
 	 *
 	 * @return Decision
 	 */
+	#[\NoDiscard( 'Peeking only answers a question.' )]
 	public function peek( int $limit, int $window ): Decision {
 		return $this->limiter->peek( $this->key(), $limit, $window );
 	}

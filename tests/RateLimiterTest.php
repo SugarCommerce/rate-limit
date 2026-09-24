@@ -42,7 +42,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter();
 
 		for ( $i = 0; $i < 5; $i++ ) {
-			$limiter->check( 'k', 5, 60 );
+			(void) $limiter->check( 'k', 5, 60 );
 		}
 
 		$this->assertTrue( $limiter->check( 'k', 5, 60 )->denied() );
@@ -61,7 +61,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter( self::NOW + 30 );
 
 		for ( $i = 0; $i < 3; $i++ ) {
-			$limiter->check( 'k', 3, 60 );
+			(void) $limiter->check( 'k', 3, 60 );
 		}
 
 		$decision = $limiter->check( 'k', 3, 60 );
@@ -76,7 +76,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter( self::NOW, $store );
 
 		for ( $i = 0; $i < 5; $i++ ) {
-			$limiter->check( 'a', 5, 60 );
+			(void) $limiter->check( 'a', 5, 60 );
 		}
 
 		$this->assertTrue( $limiter->check( 'a', 5, 60 )->denied() );
@@ -110,7 +110,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter();
 
 		for ( $i = 0; $i < 5; $i++ ) {
-			$limiter->for( 'login', '1.2.3.4' )->check( 5, 60 );
+			(void) $limiter->for( 'login', '1.2.3.4' )->check( 5, 60 );
 		}
 
 		$this->assertTrue( $limiter->for( 'login', '1.2.3.4' )->check( 5, 60 )->denied() );
@@ -121,7 +121,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter();
 
 		for ( $i = 0; $i < 5; $i++ ) {
-			$limiter->for( 'login', '1.2.3.4' )->check( 5, 60 );
+			(void) $limiter->for( 'login', '1.2.3.4' )->check( 5, 60 );
 		}
 
 		$this->assertTrue( $limiter->for( 'signup', '1.2.3.4' )->check( 5, 60 )->allowed );
@@ -173,7 +173,7 @@ final class RateLimiterTest extends TestCase {
 		$before = new RateLimiter( $store, self::NOW );
 
 		for ( $i = 0; $i < 5; $i++ ) {
-			$before->check( 'k', 5, 60 );
+			(void) $before->check( 'k', 5, 60 );
 		}
 
 		// Two full windows later nothing remains in view.
@@ -195,7 +195,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter();
 
 		for ( $i = 0; $i < 5; $i++ ) {
-			$limiter->check( 'k', 5, 60 );
+			(void) $limiter->check( 'k', 5, 60 );
 		}
 
 		$this->assertTrue( $limiter->check( 'k', 5, 60 )->denied() );
@@ -210,7 +210,7 @@ final class RateLimiterTest extends TestCase {
 		$limit   = $limiter->for( 'login', '1.2.3.4' );
 
 		for ( $i = 0; $i < 3; $i++ ) {
-			$limit->check( 3, 60 );
+			(void) $limit->check( 3, 60 );
 		}
 
 		$this->assertTrue( $limit->check( 3, 60 )->denied() );
@@ -225,7 +225,7 @@ final class RateLimiterTest extends TestCase {
 	#[DataProvider( 'invalid_allowances' )]
 	public function test_nonsensical_allowances_are_refused( int $limit, int $window ): void {
 		$this->expectException( \InvalidArgumentException::class );
-		$this->limiter()->check( 'k', $limit, $window );
+		(void) $this->limiter()->check( 'k', $limit, $window );
 	}
 
 	/** @return array<string, array{0: int, 1: int}> */
@@ -253,7 +253,7 @@ final class RateLimiterTest extends TestCase {
 		$limiter = $this->limiter();
 
 		for ( $i = 0; $i < 2; $i++ ) {
-			$limiter->check( 'k', 2, 60 );
+			(void) $limiter->check( 'k', 2, 60 );
 		}
 
 		$this->assertArrayHasKey( 'Retry-After', $limiter->check( 'k', 2, 60 )->headers() );
