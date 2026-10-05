@@ -69,6 +69,34 @@ final readonly class RateLimiter {
 	) {}
 
 	/**
+	 * A limiter on the best store this process can use.
+	 *
+	 * Shared memory when APCu is enabled *here*, the filesystem otherwise.
+	 * "Here" is the point: `extension_loaded( 'apcu' )` and `apc.enabled`
+	 * are both true on a command line where `apc.enable_cli` is off, and
+	 * the APCu store then throws on construction — so a test run, a cron
+	 * job or a deploy script dies on any server that has APCu installed
+	 * for its web workers. {@see Stores\Apcu::available()} asks the
+	 * question that matters.
+	 *
+	 * The file store is the fallback rather than the exception: slower,
+	 * but a limit that works everywhere beats a fast one that does not.
+	 *
+	 * @since 1.2.0
+	 *
+	 * @param string $directory Where the file store keeps its counters.
+	 * @param string $prefix    APCu key namespace.
+	 *
+	 * @return self
+	 *
+	 * @throws \RuntimeException When the file store's directory cannot be
+	 *                           created.
+	 */
+	public static function auto( string $directory, string $prefix = 'rl:' ): self {
+		return new self( Stores\Apcu::available() ? new Stores\Apcu( $prefix ) : new Stores\File( $directory ) );
+	}
+
+	/**
 	 * Bind this limiter to an action and an identity.
 	 *
 	 * The identity is required rather than optional, because the failure

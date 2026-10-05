@@ -62,6 +62,31 @@ $limiter->for( 'magic-link:ip', $ip )->check( 10, 3600 );
 $limiter->for( 'magic-link:email', $email )->check( 3, 3600 );
 ```
 
+## Named rules
+
+An application's limits in one table, so a call site names the action and the numbers live in one place:
+
+```php
+use SugarCommerce\RateLimit\{RateLimiter, Rules};
+
+$rules = new Rules( RateLimiter::auto( __DIR__ . '/var/limits' ), array(
+    'login'           => array( 10, 900 ),    // [ attempts, seconds ]
+    'magic-link:mail' => array( 3, 3600 ),
+) );
+
+$decision = $rules->check( 'login', $ip );    // counts
+
+if ( $decision->denied() ) {
+    return new Response( 429, '', $decision->headers() );
+}
+
+$rules->allows( 'token.miss', $ip );          // looks, without counting
+```
+
+An action with no rule, or an empty key, is never limited: the answer is `Decision::unlimited()`, allowed and with no headers. A typo in an action name should not take an endpoint down, and every caller with nothing to count against sharing one `''` counter would let any of them lock out the rest. `has()` is there for a test that proves every action you use has a rule.
+
+`RateLimiter::auto( $directory )` picks the APCu store when APCu is enabled **in this process**, and the file store otherwise. Checking `extension_loaded( 'apcu' )` or `apc.enabled` is the common mistake: both are true on a command line where `apc.enable_cli` is off, the APCu store throws, and every test run and cron job dies on the servers that have APCu for their web workers.
+
 ## Why sliding window
 
 A fixed window resets on a clock boundary, so the full allowance can be spent at 0:59 and again at 1:01 — double the limit across two seconds, which is precisely the burst you were trying to stop.
@@ -85,7 +110,7 @@ composer install
 composer test
 ```
 
-29 tests. Includes an explicit boundary-burst test proving a fixed-window implementation would let double the allowance through.
+47 tests. Includes an explicit boundary-burst test proving a fixed-window implementation would let double the allowance through, named rules with their never-limited cases, and the store `auto()` picks.
 
 ## License
 

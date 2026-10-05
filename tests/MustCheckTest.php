@@ -13,7 +13,7 @@ namespace SugarCommerce\RateLimit\Tests;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SugarCommerce\RateLimit\{Limit, RateLimiter};
+use SugarCommerce\RateLimit\{Limit, RateLimiter, Rules};
 
 /**
  * Class MustCheckTest
@@ -33,6 +33,9 @@ final class MustCheckTest extends TestCase {
 			'Limit::peek'        => array( Limit::class . '::peek' ),
 			'RateLimiter::check' => array( RateLimiter::class . '::check' ),
 			'RateLimiter::peek'  => array( RateLimiter::class . '::peek' ),
+			'Rules::check'       => array( Rules::class . '::check' ),
+			'Rules::peek'        => array( Rules::class . '::peek' ),
+			'Rules::allows'      => array( Rules::class . '::allows' ),
 		);
 	}
 
