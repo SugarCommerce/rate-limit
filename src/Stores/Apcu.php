@@ -78,7 +78,7 @@ final class Apcu implements Store {
 	public function get( string $key ): int {
 		$value = apcu_fetch( $this->prefix . $key, $found );
 
-		return $found ? (int) $value : 0;
+		return $found && is_int( $value ) ? $value : 0;
 	}
 
 	/**

@@ -134,7 +134,17 @@ final readonly class RateLimiter {
 	 * Prefer {@see self::for()}, which makes the identity part of the key
 	 * impossible to leave out.
 	 *
+	 * The answer rests on the count the atomic increment returned, not on
+	 * the read before it. Read-then-decide is the race the stores exist to
+	 * prevent, one level up: a burst of requests that all read the count
+	 * before any of them adds to it would all see room, and all be let
+	 * through. Each increment returns a different count, so exactly the
+	 * allowance passes however many arrive at once. The read beforehand
+	 * only spares an attempt that is already over the limit from adding to
+	 * a count it cannot change the answer of.
+	 *
 	 * @since 1.0.0
+	 * @since 1.3.0 Decides on the incremented count.
 	 *
 	 * @param string $key    Complete counter key.
 	 * @param int    $limit  Permitted attempts per window.
@@ -146,24 +156,29 @@ final readonly class RateLimiter {
 	 */
 	#[\NoDiscard( 'A denied decision must be enforced; counting alone limits nothing.' )]
 	public function check( string $key, int $limit, int $window ): Decision {
-		if ( $limit < 1 || $window < 1 ) {
-			throw new \InvalidArgumentException( 'Rate limit and window must both be at least 1.' );
-		}
+		self::assert_allowance( $limit, $window );
 
-		$now      = $this->now();
-		$elapsed  = $now % $window;
-		$current  = intdiv( $now, $window );
-		$estimate = $this->estimate( $key, $current, $window, $elapsed );
+		$now     = $this->now();
+		$elapsed = $now % $window;
+		$current = intdiv( $now, $window );
+		$carried = $this->carried( $key, $current, $window, $elapsed );
+		$denied  = new Decision( false, $limit, 0, $window - $elapsed, $now + ( $window - $elapsed ) );
 
-		if ( $estimate >= $limit ) {
-			return new Decision( false, $limit, 0, $window - $elapsed, $now + ( $window - $elapsed ) );
+		if ( $carried + $this->store->get( $key . ':' . $current ) >= $limit ) {
+			return $denied;
 		}
 
 		// Two windows are retained so the previous one can still be
 		// weighted while it remains partly in view.
-		$count     = $this->store->increment( $key . ':' . $current, $window * 2 );
-		$estimate  = $this->weighted( $key, $current, $window, $elapsed, $count );
-		$remaining = max( 0, $limit - (int) ceil( $estimate ) );
+		$count = $this->store->increment( $key . ':' . $current, $window * 2 );
+
+		// What the count was just before this attempt, as this attempt alone
+		// saw it. The same test as above, on a number no other request got.
+		if ( $carried + ( $count - 1 ) >= $limit ) {
+			return $denied;
+		}
+
+		$remaining = max( 0, $limit - (int) ceil( $carried + $count ) );
 
 		return new Decision( true, $limit, $remaining, $window - $elapsed, $now + ( $window - $elapsed ) );
 	}
@@ -181,13 +196,17 @@ final readonly class RateLimiter {
 	 * @param int    $window Window length in seconds.
 	 *
 	 * @return Decision
+	 *
+	 * @throws \InvalidArgumentException On a non-positive limit or window.
 	 */
 	#[\NoDiscard( 'Peeking only answers a question.' )]
 	public function peek( string $key, int $limit, int $window ): Decision {
+		self::assert_allowance( $limit, $window );
+
 		$now      = $this->now();
 		$elapsed  = $now % $window;
 		$current  = intdiv( $now, $window );
-		$estimate = $this->estimate( $key, $current, $window, $elapsed );
+		$estimate = $this->carried( $key, $current, $window, $elapsed ) + $this->store->get( $key . ':' . $current );
 
 		return new Decision(
 			$estimate < $limit,
@@ -219,46 +238,45 @@ final readonly class RateLimiter {
 	}
 
 	/**
-	 * The current weighted count for a key.
+	 * Refuse an allowance that cannot be counted against.
 	 *
-	 * @since 1.0.0
+	 * @since 1.3.0
 	 *
-	 * @param string $key     Counter key.
-	 * @param int    $current Current window index.
-	 * @param int    $window  Window length.
-	 * @param int    $elapsed Seconds into the current window.
+	 * @param int $limit  Permitted attempts per window.
+	 * @param int $window Window length in seconds.
 	 *
-	 * @return float
+	 * @return void
+	 *
+	 * @throws \InvalidArgumentException On a non-positive limit or window.
 	 */
-	private function estimate( string $key, int $current, int $window, int $elapsed ): float {
-		return $this->weighted( $key, $current, $window, $elapsed, $this->store->get( $key . ':' . $current ) );
+	private static function assert_allowance( int $limit, int $window ): void {
+		if ( $limit < 1 || $window < 1 ) {
+			throw new \InvalidArgumentException( 'Rate limit and window must both be at least 1.' );
+		}
 	}
 
 	/**
-	 * Weight the previous window by how much of it is still in view.
+	 * What the previous window still counts for: its total, weighted by how
+	 * much of it is still in view.
 	 *
 	 * Ten seconds into a sixty-second window, fifty seconds of the
 	 * previous window still fall inside the trailing minute, so it counts
-	 * for 50/60 of its total.
+	 * for 50/60 of its total. Add the current window's count for the
+	 * estimate.
 	 *
-	 * @since 1.0.0
+	 * @since 1.3.0
 	 *
 	 * @param string $key     Counter key.
 	 * @param int    $current Current window index.
 	 * @param int    $window  Window length.
 	 * @param int    $elapsed Seconds into the current window.
-	 * @param int    $count   Current window's count.
 	 *
 	 * @return float
 	 */
-	private function weighted( string $key, int $current, int $window, int $elapsed, int $count ): float {
+	private function carried( string $key, int $current, int $window, int $elapsed ): float {
 		$previous = $this->store->get( $key . ':' . ( $current - 1 ) );
 
-		if ( 0 === $previous ) {
-			return (float) $count;
-		}
-
-		return $previous * ( ( $window - $elapsed ) / $window ) + $count;
+		return 0 === $previous ? 0.0 : $previous * ( ( $window - $elapsed ) / $window );
 	}
 
 	/**

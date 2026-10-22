@@ -6,7 +6,8 @@ Sliding-window rate limiting with atomic counters. APCu, SQLite, file and in-mem
 
 - 🎯 **Identity is mandatory** — the API refuses a limit with nothing to count against.
 - 📉 **Sliding window** — no double-allowance burst across the window boundary.
-- ⚛️ **Atomic counters** — no read-then-write race, which is exactly the load a limiter exists for.
+- ⚛️ **Atomic counters, atomic decisions** — no read-then-write race in the store, and the allow/deny is decided on the count the increment returned, so a concurrent burst gets exactly the allowance.
+- 🌐 **One caller, one counter** — an IPv6 address counts as its /64, addresses are compared in canonical form, case is folded beyond ASCII.
 - 🗄️ **Pluggable stores** — APCu, SQLite, file, memory; anything else is one interface.
 - 📤 **Standard headers** — `X-RateLimit-*` and `Retry-After`.
 - 🔒 **Identities are hashed** — emails and IPs never become cache keys or filenames.
@@ -62,6 +63,8 @@ $limiter->for( 'magic-link:ip', $ip )->check( 10, 3600 );
 $limiter->for( 'magic-link:email', $email )->check( 3, 3600 );
 ```
 
+**An IPv6 address is counted as its /64.** A single host is routinely handed a whole /64 and can send from any of its 2^64 addresses, so a counter per address is no limit at all. Addresses are also compared in canonical form — `2001:DB8:0::1` is `2001:db8::1`, and `::ffff:192.0.2.1` is `192.0.2.1` — and case is folded beyond ASCII when mbstring is loaded. `Limit::identity()` shows the form that is counted. Normalise anything else yourself — the same way you do before the lookup the limit protects — or a caller with trailing junk on an email address is a new caller each time.
+
 ## Named rules
 
 An application's limits in one table, so a call site names the action and the numbers live in one place:
@@ -99,7 +102,7 @@ This weights the previous window by how much of it is still in view. Ten seconds
 |---|---|---|
 | `Apcu` | all workers on one server | Fast, atomic in the extension. The default choice. |
 | `Sqlite` | every worker that opens the database | Survives restarts, no APCu needed. Atomic in one upsert; prunes itself. |
-| `File` | all workers on one server | No extension needed. Touches disk per request; call `prune()` from cron. |
+| `File` | all workers on one server | No extension needed. Touches disk per request; call `prune()` from cron. Throws when it cannot open or lock a counter, rather than counting the attempt as a first. |
 | `Memory` | one process | Tests, and long-running workers. Useless for FPM — each worker gets its own counters. |
 
 ### SQLite
@@ -132,7 +135,7 @@ composer install
 composer test
 ```
 
-81 tests. Includes an explicit boundary-burst test proving a fixed-window implementation would let double the allowance through, named rules with their never-limited cases, the store `auto()` picks, and the SQLite store's window semantics, pruning and table-name checks.
+92 tests. Includes an explicit boundary-burst test proving a fixed-window implementation would let double the allowance through, a concurrent burst that must get exactly the allowance, IPv6 /64 and canonical-address counting, named rules with their never-limited cases, the store `auto()` picks, and the SQLite store's window semantics, pruning and table-name checks.
 
 ## License
 

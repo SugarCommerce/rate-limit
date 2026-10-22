@@ -109,7 +109,8 @@ final class Sqlite implements Store {
 			throw new \InvalidArgumentException( 'Prune odds cannot be negative.' );
 		}
 
-		$version = (string) $pdo->getAttribute( \PDO::ATTR_SERVER_VERSION );
+		$version = $pdo->getAttribute( \PDO::ATTR_SERVER_VERSION );
+		$version = is_string( $version ) ? $version : '0';
 
 		if ( version_compare( $version, self::MINIMUM_VERSION, '<' ) ) {
 			throw new \RuntimeException(
@@ -120,6 +121,8 @@ final class Sqlite implements Store {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * @throws \RuntimeException When SQLite refuses, or answers with no row.
 	 */
 	#[\Override]
 	public function increment( string $key, int $ttl, int $by = 1 ): int {
@@ -137,6 +140,12 @@ final class Sqlite implements Store {
 			array( 'key' => $key, 'by' => $by, 'expires' => $now + $ttl, 'now' => $now )
 		)->fetchColumn();
 
+		// RETURNING always gives the row. Not getting one is no reason to
+		// call this attempt the first.
+		if ( ! is_int( $hits ) && ! ( is_string( $hits ) && 1 === preg_match( '/^-?\d+\z/', $hits ) ) ) {
+			throw new \RuntimeException( 'Rate-limit increment returned no count.' );
+		}
+
 		if ( $this->prune_odds > 0 && 1 === random_int( 1, $this->prune_odds ) ) {
 			try {
 				$this->prune();
@@ -151,6 +160,8 @@ final class Sqlite implements Store {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * @throws \RuntimeException When SQLite refuses.
 	 */
 	#[\Override]
 	public function get( string $key ): int {
@@ -159,11 +170,13 @@ final class Sqlite implements Store {
 			array( 'key' => $key, 'now' => $this->now() )
 		)->fetchColumn();
 
-		return false === $hits ? 0 : (int) $hits;
+		return is_int( $hits ) || is_string( $hits ) ? (int) $hits : 0;
 	}
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * @throws \RuntimeException When SQLite refuses.
 	 */
 	#[\Override]
 	public function forget( string $key ): void {
@@ -179,6 +192,8 @@ final class Sqlite implements Store {
 	 * @since 1.3.0
 	 *
 	 * @return int Rows removed.
+	 *
+	 * @throws \RuntimeException When SQLite refuses.
 	 */
 	public function prune(): int {
 		return $this->run(
@@ -257,12 +272,18 @@ final class Sqlite implements Store {
 	 *
 	 * @since 1.3.0
 	 *
-	 * @param array<int, mixed> $info From `errorInfo()`.
+	 * @param array<mixed> $info From `errorInfo()`.
 	 *
 	 * @return string
 	 */
 	private function error( array $info ): string {
-		return (string) ( $info[2] ?? $info[0] ?? 'unknown error' );
+		foreach ( array( $info[2] ?? null, $info[0] ?? null ) as $part ) {
+			if ( is_string( $part ) && '' !== $part ) {
+				return $part;
+			}
+		}
+
+		return 'unknown error';
 	}
 
 	/**

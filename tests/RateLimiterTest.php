@@ -143,6 +143,72 @@ final class RateLimiterTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A host is given a whole /64 and can send from any address in it, so a
+	 * counter per IPv6 address is no limit at all.
+	 */
+	public function test_an_ipv6_caller_is_counted_by_its_64(): void {
+		$limiter = $this->limiter();
+
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$this->assertTrue( $limiter->for( 'login', '2001:db8:1:2::' . dechex( $i ) )->check( 3, 60 )->allowed );
+		}
+
+		$this->assertTrue( $limiter->for( 'login', '2001:db8:1:2:ffff:ffff:ffff:ffff' )->check( 3, 60 )->denied(), 'Another address in the same /64.' );
+		$this->assertTrue( $limiter->for( 'login', '2001:db8:1:3::1' )->check( 3, 60 )->allowed, 'The next /64 is somebody else.' );
+	}
+
+	public function test_one_address_spelled_two_ways_is_one_caller(): void {
+		$limiter = $this->limiter();
+
+		$this->assertSame( $limiter->for( 'login', '2001:db8::1' )->key(), $limiter->for( 'login', '2001:DB8:0:0::1' )->key() );
+		$this->assertSame( $limiter->for( 'login', '192.0.2.1' )->key(), $limiter->for( 'login', '::ffff:192.0.2.1' )->key() );
+		$this->assertNotSame( $limiter->for( 'login', '192.0.2.1' )->key(), $limiter->for( 'login', '192.0.2.2' )->key(), 'IPv4 stays per address.' );
+	}
+
+	public function test_case_is_folded_beyond_ascii(): void {
+		$limiter = $this->limiter();
+
+		$this->assertSame( $limiter->for( 'link', 'jörg@example.com' )->key(), $limiter->for( 'link', 'JÖRG@Example.com' )->key() );
+	}
+
+	/**
+	 * Every request in a burst reads the count before any of them adds to
+	 * it. Deciding on that read let them all through; deciding on what the
+	 * atomic increment returned lets through exactly the allowance.
+	 */
+	public function test_a_concurrent_burst_gets_only_the_allowance(): void {
+		$store = new class( self::NOW ) implements Store {
+
+			private Memory $inner;
+
+			public function __construct( int $now ) {
+				$this->inner = new Memory( $now );
+			}
+
+			public function increment( string $key, int $ttl, int $by = 1 ): int {
+				return $this->inner->increment( $key, $ttl, $by );
+			}
+
+			public function get( string $key ): int {
+				return 0; // Read before anybody else's increment landed.
+			}
+
+			public function forget( string $key ): void {
+				$this->inner->forget( $key );
+			}
+		};
+
+		$limiter = $this->limiter( store: $store );
+		$allowed = 0;
+
+		for ( $i = 0; $i < 20; $i++ ) {
+			$allowed += $limiter->check( 'k', 3, 60 )->allowed ? 1 : 0;
+		}
+
+		$this->assertSame( 3, $allowed );
+	}
+
 	/* ─── Sliding window ────────────────────────────────────────────── */
 
 	/**
@@ -228,6 +294,13 @@ final class RateLimiterTest extends TestCase {
 		(void) $this->limiter()->check( 'k', $limit, $window );
 	}
 
+	#[DataProvider( 'invalid_allowances' )]
+	public function test_peeking_refuses_nonsensical_allowances_too( int $limit, int $window ): void {
+		// A zero window was a division by zero.
+		$this->expectException( \InvalidArgumentException::class );
+		(void) $this->limiter()->peek( 'k', $limit, $window );
+	}
+
 	/** @return array<string, array{0: int, 1: int}> */
 	public static function invalid_allowances(): array {
 		return array(
@@ -292,6 +365,30 @@ final class RateLimiterTest extends TestCase {
 			$store->forget( 'k' );
 			$this->assertSame( 0, $store->get( 'k' ) );
 		} finally {
+			array_map( 'unlink', glob( $directory . '/*' ) ?: array() );
+			@rmdir( $directory );
+		}
+	}
+
+	/**
+	 * Counting an attempt it could not record as the first meant a full
+	 * disk, or an unwritable directory, quietly turned every limit off.
+	 */
+	public function test_file_store_refuses_to_count_what_it_cannot_record(): void {
+		$directory = sys_get_temp_dir() . '/rate-limit-test-' . bin2hex( random_bytes( 6 ) );
+
+		try {
+			$store = new File( $directory, self::NOW );
+			chmod( $directory, 0500 );
+
+			if ( is_writable( $directory ) ) {
+				$this->markTestSkipped( 'Running as a user that can write anywhere.' );
+			}
+
+			$this->expectException( \RuntimeException::class );
+			$store->increment( 'k', 60 );
+		} finally {
+			@chmod( $directory, 0700 );
 			array_map( 'unlink', glob( $directory . '/*' ) ?: array() );
 			@rmdir( $directory );
 		}

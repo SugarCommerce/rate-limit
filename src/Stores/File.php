@@ -26,6 +26,12 @@ use SugarCommerce\RateLimit\Store;
  * two requests both read 9 and both write 10. It undercounts exactly
  * when it is under the load it exists to limit.
  *
+ * A counter that cannot be opened or locked is an exception, not a count
+ * of one. Answering "first attempt" whenever the disk is full or the
+ * directory unwritable turns every limit off without a word — and a
+ * limiter keyed on caller-chosen identities writes a file per identity,
+ * so filling the disk is something an attacker can arrange.
+ *
  * @since 1.0.0
  */
 final class File implements Store {
@@ -49,6 +55,11 @@ final class File implements Store {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * @since 1.3.0 Throws rather than counting an attempt it could not
+	 *              record as the first.
+	 *
+	 * @throws \RuntimeException When the counter cannot be opened or locked.
 	 */
 	#[\Override]
 	public function increment( string $key, int $ttl, int $by = 1 ): int {
@@ -56,15 +67,12 @@ final class File implements Store {
 		$handle = @fopen( $path, 'c+' );
 
 		if ( false === $handle ) {
-			// Failing open would remove the limit entirely; failing
-			// closed would lock everyone out. Counting the request as
-			// the first is the least-bad option and stays available.
-			return $by;
+			throw new \RuntimeException( 'Could not open a rate-limit counter in ' . $this->directory );
 		}
 
 		try {
 			if ( ! flock( $handle, LOCK_EX ) ) {
-				return $by;
+				throw new \RuntimeException( 'Could not lock a rate-limit counter in ' . $this->directory );
 			}
 
 			$now      = $this->now();
@@ -92,12 +100,26 @@ final class File implements Store {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * Under a shared lock, so it never reads a file increment() has
+	 * truncated and not yet written back — which would read as zero.
 	 */
 	#[\Override]
 	public function get( string $key ): int {
-		$contents = @file_get_contents( $this->path( $key ) );
+		$handle = @fopen( $this->path( $key ), 'r' );
 
-		if ( false === $contents ) {
+		if ( false === $handle ) {
+			return 0;
+		}
+
+		try {
+			$contents = flock( $handle, LOCK_SH ) ? stream_get_contents( $handle ) : false;
+		} finally {
+			flock( $handle, LOCK_UN );
+			fclose( $handle );
+		}
+
+		if ( ! is_string( $contents ) ) {
 			return 0;
 		}
 
@@ -173,7 +195,7 @@ final class File implements Store {
 	private static function parse( string $contents ): array {
 		$parts = explode( ':', trim( $contents ), 2 );
 
-		return array( (int) ( $parts[0] ?? 0 ), (int) ( $parts[1] ?? 0 ) );
+		return array( (int) $parts[0], (int) ( $parts[1] ?? 0 ) );
 	}
 
 	/**

@@ -98,6 +98,19 @@ final class RulesTest extends TestCase {
 		new Rules( new RateLimiter( new Memory( self::NOW ), self::NOW ), array( 'x' => array( 0, 60 ) ) );
 	}
 
+	public function test_a_rule_is_read_by_its_keys_not_its_order(): void {
+		// [ 1 => 60, 0 => 5 ] is 5 in 60 seconds. Reordered, it was 60 in 5.
+		$rules = new Rules( new RateLimiter( new Memory( self::NOW ), self::NOW ), array( 'x' => array( 1 => 60, 0 => 5 ) ) );
+
+		$this->assertSame( 5, $rules->check( 'x', 'k' )->limit );
+	}
+
+	public function test_a_rule_without_its_two_positions_is_refused(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		new Rules( new RateLimiter( new Memory( self::NOW ), self::NOW ), array( 'x' => array( 'limit' => 5, 'window' => 60 ) ) );
+	}
+
 	/* ─── Decisions with no limit ───────────────────────────────────── */
 
 	public function test_an_unlimited_decision_allows_and_sends_no_headers(): void {

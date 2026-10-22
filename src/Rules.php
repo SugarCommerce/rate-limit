@@ -41,6 +41,13 @@ namespace SugarCommerce\RateLimit;
 final readonly class Rules {
 
 	/**
+	 * Each action's rule, as [ attempts allowed, window in seconds ].
+	 *
+	 * @var array<string, array{0: int, 1: int}>
+	 */
+	private array $rules;
+
+	/**
 	 * @since 1.2.0
 	 *
 	 * @param RateLimiter                          $limiter Where attempts are counted.
@@ -52,13 +59,15 @@ final readonly class Rules {
 	 */
 	public function __construct(
 		private RateLimiter $limiter,
-		private array $rules,
+		array $rules,
 	) {
+		$checked = array();
+
 		foreach ( $rules as $action => $rule ) {
-			if ( ! is_array( $rule ) || ! is_int( $rule[0] ?? null ) || ! is_int( $rule[1] ?? null ) || $rule[0] < 1 || $rule[1] < 1 ) {
-				throw new \InvalidArgumentException( 'Rate limit rule "' . $action . '" must be [ limit, seconds ], both at least 1.' );
-			}
+			$checked[ (string) $action ] = self::checked( (string) $action, $rule );
 		}
+
+		$this->rules = $checked;
 	}
 
 	/**
@@ -128,6 +137,32 @@ final readonly class Rules {
 	}
 
 	/**
+	 * A rule as configured, checked and read by position.
+	 *
+	 * Read as `[0]` and `[1]`, never reordered: `array( 1 => 60, 0 => 5 )`
+	 * is a limit of 5 in 60 seconds, as its keys say, not the 60 in 5 its
+	 * order would give. Configuration is checked here rather than trusted
+	 * to its documented type, because a mistake in it is a limit that is
+	 * silently wrong.
+	 *
+	 * @since 1.3.0
+	 *
+	 * @param string $action Action name, for the message.
+	 * @param mixed  $rule   The rule as given.
+	 *
+	 * @return array{0: int, 1: int}
+	 *
+	 * @throws \InvalidArgumentException When it is not two positive integers.
+	 */
+	private static function checked( string $action, mixed $rule ): array {
+		if ( ! is_array( $rule ) || ! is_int( $rule[0] ?? null ) || ! is_int( $rule[1] ?? null ) || $rule[0] < 1 || $rule[1] < 1 ) {
+			throw new \InvalidArgumentException( 'Rate limit rule "' . $action . '" must be [ limit, seconds ], both at least 1.' );
+		}
+
+		return array( $rule[0], $rule[1] );
+	}
+
+	/**
 	 * The rule that applies, or null when nothing does.
 	 *
 	 * @since 1.2.0
@@ -138,6 +173,6 @@ final readonly class Rules {
 	 * @return array{0: int, 1: int}|null
 	 */
 	private function rule( string $action, string $key ): ?array {
-		return '' === trim( $key ) || ! isset( $this->rules[ $action ] ) ? null : array_values( $this->rules[ $action ] );
+		return '' === trim( $key ) || ! isset( $this->rules[ $action ] ) ? null : $this->rules[ $action ];
 	}
 }
