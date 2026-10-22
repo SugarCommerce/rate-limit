@@ -1,19 +1,19 @@
 # Rate Limit
 
-Sliding-window rate limiting with atomic counters. APCu, file and in-memory stores, standard headers, and an API that makes forgetting the identity key impossible. Zero dependencies.
+Sliding-window rate limiting with atomic counters. APCu, SQLite, file and in-memory stores, standard headers, and an API that makes forgetting the identity key impossible. Zero dependencies.
 
 ## Features
 
 - 🎯 **Identity is mandatory** — the API refuses a limit with nothing to count against.
 - 📉 **Sliding window** — no double-allowance burst across the window boundary.
 - ⚛️ **Atomic counters** — no read-then-write race, which is exactly the load a limiter exists for.
-- 🗄️ **Pluggable stores** — APCu, file, memory; anything else is one interface.
+- 🗄️ **Pluggable stores** — APCu, SQLite, file, memory; anything else is one interface.
 - 📤 **Standard headers** — `X-RateLimit-*` and `Retry-After`.
 - 🔒 **Identities are hashed** — emails and IPs never become cache keys or filenames.
 
 ## Requirements
 
-PHP 8.5+. `ext-apcu` recommended.
+PHP 8.5+. `ext-apcu` recommended; `pdo_sqlite` with SQLite 3.35+ for the SQLite store.
 
 ## Installation
 
@@ -98,8 +98,30 @@ This weights the previous window by how much of it is still in view. Ten seconds
 | Store | Shared across | Notes |
 |---|---|---|
 | `Apcu` | all workers on one server | Fast, atomic in the extension. The default choice. |
+| `Sqlite` | every worker that opens the database | Survives restarts, no APCu needed. Atomic in one upsert; prunes itself. |
 | `File` | all workers on one server | No extension needed. Touches disk per request; call `prune()` from cron. |
 | `Memory` | one process | Tests, and long-running workers. Useless for FPM — each worker gets its own counters. |
+
+### SQLite
+
+For an application already on SQLite: counters that every PHP-FPM worker shares and that survive a restart, without APCu.
+
+```php
+use SugarCommerce\RateLimit\{RateLimiter, Stores\Sqlite};
+
+$pdo = new PDO( 'sqlite:' . __DIR__ . '/var/app.sqlite' );
+$pdo->exec( 'PRAGMA journal_mode = WAL' );
+$pdo->exec( 'PRAGMA busy_timeout = 5000' );
+
+$store = new Sqlite( $pdo );   // table `rate_limits`; or new Sqlite( $pdo, 'throttle' )
+$store->install();             // CREATE TABLE / INDEX IF NOT EXISTS — or put $store->schema() in a migration
+
+$limiter = new RateLimiter( $store );
+```
+
+Each increment is a single `INSERT … ON CONFLICT DO UPDATE … RETURNING`, so concurrent workers never read the same count. The table name is interpolated into SQL and must be a plain identifier; anything else throws.
+
+The limiter writes a new key every window, so expired rows build up. One increment in 1,000 also deletes them — change the odds with the third argument, or pass `0` and call `$store->prune()` from cron. Set a `busy_timeout`, or a worker that finds the database locked fails instead of waiting.
 
 Behind a load balancer, per-machine stores mean the effective limit multiplies by the server count. Implement `Store` against Redis or your database when that matters — it's three methods, and the only requirement is that `increment()` is atomic.
 
@@ -110,7 +132,7 @@ composer install
 composer test
 ```
 
-47 tests. Includes an explicit boundary-burst test proving a fixed-window implementation would let double the allowance through, named rules with their never-limited cases, and the store `auto()` picks.
+81 tests. Includes an explicit boundary-burst test proving a fixed-window implementation would let double the allowance through, named rules with their never-limited cases, the store `auto()` picks, and the SQLite store's window semantics, pruning and table-name checks.
 
 ## License
 

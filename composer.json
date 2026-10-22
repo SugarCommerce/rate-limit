@@ -1,15 +1,19 @@
 {
   "name": "sugarcommerce/rate-limit",
-  "version": "1.2.0",
-  "description": "Sliding-window rate limiting with atomic counters. APCu, file and in-memory stores, standard rate-limit headers, and an API that makes forgetting the identity key impossible. Zero dependencies.",
+  "version": "1.3.0",
+  "description": "Sliding-window rate limiting with atomic counters. APCu, SQLite, file and in-memory stores, standard rate-limit headers, and an API that makes forgetting the identity key impossible. Zero dependencies.",
   "type": "library",
   "license": "GPL-2.0-or-later",
   "homepage": "https://github.com/sugarcommerce/rate-limit",
   "authors": [ { "name": "David Sherlock", "homepage": "https://arraypress.com/" } ],
-  "keywords": ["rate-limit", "throttle", "sliding-window", "apcu", "429", "brute-force"],
+  "keywords": ["rate-limit", "throttle", "sliding-window", "apcu", "sqlite", "429", "brute-force"],
   "require": { "php": ">=8.5" },
   "require-dev": { "phpunit/phpunit": "^13.0" },
-  "suggest": { "ext-apcu": "Shared-memory counters — the right store for a single server." },
+  "suggest": {
+    "ext-apcu": "Shared-memory counters — the right store for a single server.",
+    "ext-pdo_sqlite": "Counters in a table, shared by every worker and kept across restarts (SQLite 3.35+).",
+    "sugarcommerce/sqlite": "A configured SQLite connection to hand the SQLite store."
+  },
   "autoload": { "psr-4": { "SugarCommerce\\RateLimit\\": "src/" } },
   "autoload-dev": { "psr-4": { "SugarCommerce\\RateLimit\\Tests\\": "tests/" } },
   "scripts": { "test": "phpunit" },
